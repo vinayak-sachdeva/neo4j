@@ -1,0 +1,77 @@
+MILESTONE-1
+
+1.
+match (n:TypeDeclaration) where n.entity_type in ["class", "interface"] return n
+
+2.
+match (n:PackageDeclaration{simplename:"proxy"})-[:CONTAIN]->(m:TypeDeclaration{entity_type:"class"}) return n, m
+
+3.
+a)
+match (n:TypeDeclaration{entity_type:"class", simplename:"Wizard"})-[:EXTENDS*]->(m:TypeDeclaration{entity_type:"class"})-[:member]->(f:MethodDeclaration{isConstructor:"False"})
+where not f.modifiers contains "private"
+with n, f
+where not exists((f)-[:OVERRIDDEN_BY]->())
+return n, f
+UNION
+match (n:TypeDeclaration{entity_type:"class", simplename:"Wizard"})-[:member]->(f:MethodDeclaration{isConstructor:"False"}) return n, f
+b)
+match (n:TypeDeclaration{entity_type:"class", simplename:"Wizard"})-[:EXTENDS*0..]->(m:TypeDeclaration{entity_type:"class"})-[:member]->(f:MethodDeclaration{isConstructor:"False"})
+return n, f
+
+4.
+match (n {entity_type:"class", simplename:"Target"})-[:EXTENDS | :IMPLEMENTS*]->(m)
+return n, m limit 50
+
+5.
+match (n:IfStatement)-[:condition]->(m) where "BooleanLiteral" in labels(m) return n
+
+6.
+match (n:IfStatement)-[:condition]->(m) where not "BooleanLiteral" in labels(m) return n
+
+7.
+match (n:TypeDeclaration{entity_type:"class", simplename:"Wizard"})-[:CONTAIN_IN]->(m:PackageDeclaration) return n, m
+
+8.
+a)
+match (n:TypeDeclaration{entity_type:"class", simplename:"ElfWarlord"})-[:EXTENDS*1..]->(m:TypeDeclaration{entity_type:"class"})-[:member]->(f:MethodDeclaration{isConstructor:"False"}) 
+where not f.modifiers contains "private" and not exists((f)-[:OVERRIDDEN_BY]->())
+with sum(toInt(f.Cyclomatic)) as sum1
+match (n:TypeDeclaration{entity_type:"class", simplename:"ElfWarlord"})-[:member]->(f:MethodDeclaration{isConstructor:"False"})
+return sum(toInt(f.Cyclomatic)) + sum1 as sum
+b)
+match(n:TypeDeclaration{entity_type:"class", simplename:"AccountCreateEvent"})-[:EXTENDS*0..]->(m:TypeDeclaration{entity_type:"class"})-[:member]->(f:MethodDeclaration)
+return sum(toInteger(f.Cyclomatic))
+
+9.
+match (n:MethodDeclaration) where toInteger(n.CountStmt) >= 10 return n
+
+10.
+match (n:MethodDeclaration)-[:parameter]->() with n, count(*) as cnt where cnt >= 4 return n
+
+11.
+match (n:MethodDeclaration) where toInteger(n.CountLineCode) >= 50 return n
+
+
+
+MILESTONE-2
+
+1.
+match (constructor:MethodDeclaration{isConstructor:"True"})<-[:member]-(n:TypeDeclaration{entity_type:"class"})-[:member]->(method:MethodDeclaration{isConstructor:"False"})-[:return]->(r:SimpleType{name:n.simplename})
+where constructor.modifiers contains "private" and method.modifiers contains "public" and method.modifiers contains "static"
+with n, method
+match (n)-[:member]->(field:FieldDeclaration)-[:type]->(:SimpleType{name:toString(n.simplename)})
+where field.modifiers contains "private" and field.modifiers contains "static"
+return n
+
+3.
+match (return_type:SimpleType)<-[:return]-(nested_class_function:MethodDeclaration)<-[:member]-(nested_class:TypeDeclaration{entity_type:"class"})<-[:member]-(class:TypeDeclaration{entity_type:"class"})-[:member]->(function:MethodDeclaration{isConstructor:"True"})-[:parameter]->(arg)-[:type]->(var_type)
+with class, count(distinct var_type) as cnt, function, var_type, nested_class, return_type
+where cnt=1 and function.modifiers contains "private" and "SimpleType" in labels(var_type) and var_type.name=nested_class.simplename and return_type.name=class.simplename and nested_class.modifiers contains "static"
+with class, nested_class
+match (class)-[:member]->(field:FieldDeclaration)-[:type]->(field_type:SimpleType), (nested_return_type:SimpleType{name:toString(nested_class.simplename)})<-[:return]-(:MethodDeclaration{isConstructor:"False"})<-[:member]-(nested_class)-[:member]->(nested_class_constructor:MethodDeclaration{isConstructor:"True"})
+where nested_class_constructor.modifiers contains "public"
+with collect(field_type.name) as field_set, class, nested_class
+match (nested_class)-[:member]->(nested_field:FieldDeclaration)-[:type]->(nested_field_type:SimpleType)
+where nested_field_type.name in field_set
+return class, nested_class
